@@ -11,7 +11,7 @@ import (
 )
 
 const outOfRange = 99999
-const daysInLastSixMonths = 183
+const daysInLastSixMonths = 182
 const weeksInLastSixMonths = 26
 
 type column []int
@@ -31,20 +31,12 @@ func getBeginningOfDay(t time.Time) time.Time {
 
 // countDaysSinceDate counts how many days passed since the passed `date`
 func countDaysSinceDate(date time.Time) int {
-	days := 0
 	now := getBeginningOfDay(time.Now())
-	date = getBeginningOfDay(date)
-
-	if date.Equal(now) {
-		return -1
-	}
-
-	for date.Before(now) {
-		date = date.Add(time.Hour * 24)
-		days++
-		if days > daysInLastSixMonths {
-			return outOfRange
-		}
+	startOfDay := getBeginningOfDay(date)
+	duration := now.Sub(startOfDay)
+	days := int(duration / (24 * time.Hour))
+	if days > daysInLastSixMonths || days < 0 {
+		return outOfRange
 	}
 	return days
 }
@@ -52,7 +44,6 @@ func countDaysSinceDate(date time.Time) int {
 // fillCommits given a repository found in `path`, gets the commits and
 // puts them in the `commits` map, returning it when completed
 func fillCommits(email string, path string, commits map[int]int) map[int]int {
-
 	// instantiate a git repo object from path
 	repo, err := git.PlainOpen(path)
 	if err != nil {
@@ -61,9 +52,6 @@ func fillCommits(email string, path string, commits map[int]int) map[int]int {
 	// get the HEAD reference
 	ref, err := repo.Head()
 	if err != nil {
-		if err.Error() == "reference not found" {
-			return commits
-		}
 		panic(err)
 	}
 	// get the commits history starting from HEAD
@@ -74,16 +62,15 @@ func fillCommits(email string, path string, commits map[int]int) map[int]int {
 	// iterate the commits
 	offset := calcOffset()
 	err = iterator.ForEach(func(c *object.Commit) error {
-		fmt.Println(c.Author.When)
-		daysAgo := countDaysSinceDate(c.Author.When) + offset
-
 		if c.Author.Email != email {
 			return nil
 		}
-
-		if daysAgo >= 0 && daysAgo <= daysInLastSixMonths {
-			commits[daysAgo]++
+		days := countDaysSinceDate(c.Author.When)
+		if days == outOfRange {
+			return nil
 		}
+		daysAgo := daysInLastSixMonths + offset - days
+		commits[daysAgo]++
 
 		return nil
 	})
@@ -99,10 +86,10 @@ func fillCommits(email string, path string, commits map[int]int) map[int]int {
 func processRepositories(email string) map[int]int {
 	filePath := utils.GetDotFilePath()
 	repos := utils.ParseFileLinesToSlice(filePath)
-	daysInMap := daysInLastSixMonths
+	daysInMap := daysInLastSixMonths + 7
 
-	commits := make(map[int]int, daysInMap+1)
-	for i := daysInMap; i >= 0; i-- {
+	commits := make(map[int]int, daysInMap)
+	for i := 0; i <= daysInMap; i++ {
 		commits[i] = 0
 	}
 
@@ -110,35 +97,14 @@ func processRepositories(email string) map[int]int {
 		commits = fillCommits(email, path, commits)
 	}
 
-	// fmt.Printf("%v\n", commits)
-
 	return commits
 }
 
 // calcOffset determines and returns the amount of days missing to fill
 // the last row of the stats graph
 func calcOffset() int {
-	var offset int
 	weekday := time.Now().Weekday()
-
-	switch weekday {
-	case time.Sunday:
-		offset = 7
-	case time.Monday:
-		offset = 6
-	case time.Tuesday:
-		offset = 5
-	case time.Wednesday:
-		offset = 4
-	case time.Thursday:
-		offset = 3
-	case time.Friday:
-		offset = 2
-	case time.Saturday:
-		offset = 1
-	}
-
-	return offset
+	return int(weekday)
 }
 
 // printCell given a cell value prints it with a different format
@@ -178,6 +144,7 @@ func printCell(val int, today bool) {
 func printCommitsStats(commits map[int]int) {
 	keys := sortMapIntoSlice(commits)
 	cols := buildCols(keys, commits)
+	printMonths()
 	printCells(cols)
 }
 
@@ -198,20 +165,25 @@ func sortMapIntoSlice(m map[int]int) []int {
 func buildCols(keys []int, commits map[int]int) map[int]column {
 	cols := make(map[int]column)
 	col := column{}
+	lastWeek := -1
 
 	for _, k := range keys {
-		week := int(k / 7) //26,25...1
-		dayinweek := k % 7 // 0,1,2,3,4,5,6
+		week := int(k / 7)
+		dayinweek := k % 7
 
-		if dayinweek == 0 { //reset
+		if dayinweek == 0 {
 			col = column{}
 		}
-
 		col = append(col, commits[k])
+		lastWeek = week
 
 		if dayinweek == 6 {
 			cols[week] = col
 		}
+	}
+
+	if len(col) > 0 {
+		cols[lastWeek] = col
 	}
 
 	return cols
@@ -219,29 +191,20 @@ func buildCols(keys []int, commits map[int]int) map[int]column {
 
 // printCells prints the cells of the graph
 func printCells(cols map[int]column) {
-	printMonths()
-	for j := 6; j >= 0; j-- {
-		for i := weeksInLastSixMonths - 1; i >= 0; i-- {
-			if i == weeksInLastSixMonths-1 {
-				printDayCol(j)
-			}
+	for j := 0; j <= 6; j++ {
+		printDayCol(j)
+		for i := 0; i <= weeksInLastSixMonths+1; i++ {
+			v := 0
+			today := false
 			if col, ok := cols[i]; ok {
-				if i == 0 && j == calcOffset()-1 {
-					// printCell(col[j], true)
-					if len(col) > j {
-						printCell(col[j], true)
-					} else {
-						printCell(10, true)
-					}
-					continue
-				} else {
-					if len(col) > j {
-						printCell(col[j], false)
-						continue
-					}
+				if len(col) > j {
+					v = col[j]
 				}
 			}
-			printCell(0, false)
+			if i == weeksInLastSixMonths && j == calcOffset() {
+				today = true
+			}
+			printCell(v, today)
 		}
 		fmt.Printf("\n")
 	}
