@@ -47,17 +47,22 @@ func fillCommits(email string, path string, commits map[int]int) map[int]int {
 	// instantiate a git repo object from path
 	repo, err := git.PlainOpen(path)
 	if err != nil {
-		panic(err)
+		return commits
 	}
 	// get the HEAD reference
 	ref, err := repo.Head()
 	if err != nil {
-		panic(err)
+		if err.Error() == "reference not found" {
+			return commits
+		}
+		// log.DEBUG(err)
+		return commits
 	}
 	// get the commits history starting from HEAD
 	iterator, err := repo.Log(&git.LogOptions{From: ref.Hash()})
 	if err != nil {
-		panic(err)
+		fmt.Errorf("%s", err.Error())
+		return commits
 	}
 	// iterate the commits
 	offset := calcOffset()
@@ -112,12 +117,21 @@ func calcOffset() int {
 func printCell(val int, today bool) {
 	escape := "\033[0;37;30m"
 	switch {
-	case val > 0 && val < 5:
+	case val == 0:
+		// gray/white (empty day)
 		escape = "\033[1;30;47m"
-	case val >= 5 && val < 10:
-		escape = "\033[1;30;43m"
-	case val >= 10:
+	case val > 0 && val <= 3:
+		// very light green
+		escape = "\033[1;30;102m"
+	case val >= 4 && val <= 6:
+		// light green
 		escape = "\033[1;30;42m"
+	case val >= 7 && val <= 9:
+		// medium green (bold text)
+		escape = "\033[1;37;42m"
+	case val >= 10:
+		// dark/strong shade
+		escape = "\033[1;37;100m"
 	}
 
 	if today {
