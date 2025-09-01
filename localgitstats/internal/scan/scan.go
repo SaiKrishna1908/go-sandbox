@@ -35,7 +35,7 @@ func scanGitFolders(folders []string, folder string) []string {
 			path = folder + "/" + file.Name()
 			if file.Name() == ".git" {
 				path = strings.TrimSuffix(path, "/.git")
-				fmt.Println(path)
+				// fmt.Println(path)
 				folders = append(folders, path)
 				continue
 			}

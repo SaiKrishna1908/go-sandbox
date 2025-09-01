@@ -18,6 +18,17 @@ func GetDotFilePath() string {
 	return dotFile
 }
 
+func ClearDotFile() bool {
+	dotFile := GetDotFilePath()
+	err := os.Truncate(dotFile, 0)
+
+	if err != nil {
+		log.Fatal(err)
+		return false
+	}
+	return true
+}
+
 func ParseFileLinesToSlice(filePath string) []string {
 	f := openFile(filePath)
 	defer f.Close()

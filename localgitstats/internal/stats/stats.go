@@ -33,6 +33,12 @@ func getBeginningOfDay(t time.Time) time.Time {
 func countDaysSinceDate(date time.Time) int {
 	days := 0
 	now := getBeginningOfDay(time.Now())
+	date = getBeginningOfDay(date)
+
+	if date.Equal(now) {
+		return -1
+	}
+
 	for date.Before(now) {
 		date = date.Add(time.Hour * 24)
 		days++
@@ -47,8 +53,6 @@ func countDaysSinceDate(date time.Time) int {
 // puts them in the `commits` map, returning it when completed
 func fillCommits(email string, path string, commits map[int]int) map[int]int {
 
-	fmt.Println("Email: " + email)
-	fmt.Println("Path: " + path)
 	// instantiate a git repo object from path
 	repo, err := git.PlainOpen(path)
 	if err != nil {
@@ -57,7 +61,6 @@ func fillCommits(email string, path string, commits map[int]int) map[int]int {
 	// get the HEAD reference
 	ref, err := repo.Head()
 	if err != nil {
-		fmt.Println(path)
 		if err.Error() == "reference not found" {
 			return commits
 		}
@@ -71,13 +74,14 @@ func fillCommits(email string, path string, commits map[int]int) map[int]int {
 	// iterate the commits
 	offset := calcOffset()
 	err = iterator.ForEach(func(c *object.Commit) error {
+		fmt.Println(c.Author.When)
 		daysAgo := countDaysSinceDate(c.Author.When) + offset
 
 		if c.Author.Email != email {
 			return nil
 		}
 
-		if daysAgo != outOfRange {
+		if daysAgo >= 0 && daysAgo <= daysInLastSixMonths {
 			commits[daysAgo]++
 		}
 
@@ -97,8 +101,8 @@ func processRepositories(email string) map[int]int {
 	repos := utils.ParseFileLinesToSlice(filePath)
 	daysInMap := daysInLastSixMonths
 
-	commits := make(map[int]int, daysInMap)
-	for i := daysInMap; i > 0; i-- {
+	commits := make(map[int]int, daysInMap+1)
+	for i := daysInMap; i >= 0; i-- {
 		commits[i] = 0
 	}
 
@@ -106,7 +110,7 @@ func processRepositories(email string) map[int]int {
 		commits = fillCommits(email, path, commits)
 	}
 
-	fmt.Printf("%v\n", commits)
+	// fmt.Printf("%v\n", commits)
 
 	return commits
 }
@@ -217,17 +221,17 @@ func buildCols(keys []int, commits map[int]int) map[int]column {
 func printCells(cols map[int]column) {
 	printMonths()
 	for j := 6; j >= 0; j-- {
-		for i := weeksInLastSixMonths + 1; i >= 0; i-- {
-			if i == weeksInLastSixMonths+1 {
+		for i := weeksInLastSixMonths - 1; i >= 0; i-- {
+			if i == weeksInLastSixMonths-1 {
 				printDayCol(j)
 			}
 			if col, ok := cols[i]; ok {
-				//special case today
 				if i == 0 && j == calcOffset()-1 {
+					// printCell(col[j], true)
 					if len(col) > j {
 						printCell(col[j], true)
 					} else {
-						printCell(0, true)
+						printCell(10, true)
 					}
 					continue
 				} else {
