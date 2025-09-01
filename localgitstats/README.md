@@ -148,4 +148,4 @@ git config --global user.email
 ```
 
 ### Checkout the Demo!!
-[![Video Title](./assets/thumbnail.png)](./assets/demo.mp4)
+![Demo](assets/demo.gif)
